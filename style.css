@@ -1,0 +1,283 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+/* ==========================================================================
+   Config
+   ========================================================================== */
+:root {
+    --bg-main: #0f172a;       
+    --bg-card: #1e293b;       
+    --bg-input: #334155;      
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-hover:  rgba(96, 165, 250, 0.5);
+    
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+
+    --accent-blue: #3b82f6;
+    --accent-glow: 0 0 15px rgba(59, 130, 246, 0.15);
+    --accent-danger: #ef4444;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-main) !important;
+    color: var(--text-primary) !important;
+    background-image: radial-gradient(circle at 50% 0%, #312e81 0%, transparent 45%); 
+    background-attachment: fixed;
+    transition: background-color 0.3s ease;
+}
+
+/* Global transitions */
+.glass-panel, details.group, button, input, select, tr {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800 {
+    color: var(--text-secondary) !important;
+}
+.text-gray-400 { color: var(--text-muted) !important; }
+
+/* ==========================================================================
+   Components
+   ========================================================================== */
+
+/* Cards & Panels */
+.glass-panel, .bg-white, details.group, #timerPanel {
+    background-color: var(--bg-card) !important;
+    border: 1px solid var(--border-subtle) !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(0); 
+    border-radius: 12px;
+}
+
+.glass-panel:hover, details.group:hover, #timerPanel:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 
+                0 0 12px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Inputs */
+.input-custom, select, input {
+    background-color: var(--bg-input) !important;
+    border: 1px solid var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+    border-radius: 8px;
+    padding-left: 12px;
+}
+
+.input-custom:focus, select:focus, input:focus {
+    background-color: #475569 !important;
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+    outline: none;
+    transform: translateY(-1px);
+}
+
+/* Timer Specifics */
+.timer-display {
+    font-family: 'JetBrains Mono', monospace;
+    color: #ffffff;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+#timerPanel.timer-active {
+    border-left: 4px solid var(--accent-danger) !important;
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, var(--bg-card) 100%) !important;
+}
+#timerPanel.timer-active .timer-display {
+    color: var(--accent-danger);
+    text-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
+
+/* Data Table */
+table { border-spacing: 0; width: 100%; }
+
+thead th {
+    background-color: #0f172a !important; 
+    color: var(--text-secondary) !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--border-subtle) !important;
+    padding-top: 16px; padding-bottom: 16px;
+}
+
+tbody tr {
+    background-color: var(--bg-card) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+}
+
+tbody tr:hover {
+    background-color: #2e3a52 !important; 
+    transform: scale(1.005);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 10;
+    position: relative;
+    border-radius: 4px;
+}
+
+td {
+    color: var(--text-secondary) !important;
+    border: none !important;
+}
+td.font-medium { color: #fff !important; font-weight: 600; }
+
+/* Details Accordion */
+details.group > summary {
+    background-color: transparent !important;
+    color: var(--text-primary) !important;
+    cursor: pointer;
+}
+details.group > div {
+    background-color: #161e2e !important; 
+    border-top: 1px solid var(--border-subtle) !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-main); }
+::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 10px;
+    border: 2px solid var(--bg-main);
+}
+::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* Helpers & Utilities */
+.text-red-500 { color: #f87171 !important; opacity: 0.8; }
+.text-red-500:hover { opacity: 1; transform: scale(1.2); }
+
+span[class*="bg-blue-100"] {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    color: #60a5fa !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.bg-gray-50, .bg-gray-100 {
+    background-color: #161e2e !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* --- Select Hack --- */
+select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    padding-right: 2.5rem !important;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1rem;
+}
+select option {
+    background-color: #1e293b !important;
+    color: #f8fafc !important; 
+    padding: 10px;
+}
+input::-webkit-calendar-picker-indicator {
+    filter: invert(1); 
+    opacity: 0.6;
+    transition: 0.2s;
+}
+input:hover::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
+}
+
+/* ==========================================================================
+   Modals
+   ========================================================================== */
+#projectModalOverlay.hidden { display: none; }
+#projectModalOverlay:not(.hidden) { display: flex; }
+
+.project-item {
+    background-color: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+}
+.project-item:hover {
+    background-color: rgba(255,255,255,0.08);
+    border-color: var(--accent-blue);
+}
+
+/* Modal Buttons */
+.btn-action-group { display: flex; gap: 8px; }
+
+.btn-finish {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.btn-finish:hover {
+    background-color: #059669;
+    color: white;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.btn-restore {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.btn-restore:hover {
+    background-color: #2563eb;
+    color: white;
+}
+
+.btn-export-mini {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.btn-export-mini:hover {
+    background-color: #d97706;
+    color: white;
+}
+
+.btn-delete-project {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.btn-delete-project:hover {
+    background-color: #ef4444;
+    color: white;
+}
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; border: none; }
