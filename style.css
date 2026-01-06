@@ -6,8 +6,8 @@
 :root {
     --bg-main: #0f172a;       
     --bg-card: #1e293b;       
-    --bg-input: #334155;
-    --bg-filter-bar: #161e2e;     
+    --bg-input: #334155;      
+    --bg-filter-bar: #161e2e;
     --border-subtle: rgba(255, 255, 255, 0.15);
     --border-hover:  rgba(96, 165, 250, 0.8);
     
@@ -24,7 +24,7 @@
     --bg-main: #f1f5f9;        
     --bg-card: #ffffff;        
     --bg-input: #e2e8f0;       
-    --bg-filter-bar: #f8fafc;  
+    --bg-filter-bar: #f8fafc;
     --border-subtle: #cbd5e1;  
     --border-hover:  #3b82f6;
     
@@ -184,7 +184,7 @@ header img.filter {
 #projectModalOverlay.hidden, #loginOverlay.hidden, #weeklyReportOverlay.hidden, #exportModalOverlay.hidden { display: none; }
 #projectModalOverlay:not(.hidden), #loginOverlay:not(.hidden), #weeklyReportOverlay:not(.hidden), #exportModalOverlay:not(.hidden) { display: flex; }
 
-/* Projetos Modal Styles (CORRIGIDO AQUI) */
+/* Projetos Modal Styles */
 .project-item {
     background-color: var(--bg-input);
     border: 1px solid var(--border-subtle);
@@ -194,22 +194,22 @@ header img.filter {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
-    gap: 15px; /* Espaço para o texto não colar nos botões */
+    gap: 15px;
 }
 
 .btn-action-group { 
     display: flex; 
-    flex-direction: row; /* Garante linha */
+    flex-direction: row;
     align-items: center;
-    gap: 10px; /* Espaço entre os ícones */
-    flex-shrink: 0; /* Impede encolhimento */
+    gap: 10px;
+    flex-shrink: 0;
 }
 
 .btn-finish, .btn-restore, .btn-export-mini, .btn-delete-project {
     display: flex; align-items: center; justify-content: center;
     padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 600;
     cursor: pointer; transition: all 0.2s ease; border-width: 1px; border-style: solid;
-    min-width: 36px; /* Tamanho mínimo para clique */
+    min-width: 36px;
 }
 
 .btn-finish { background-color: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.5); }
@@ -295,3 +295,13 @@ span[class*="bg-blue-100"] {
     100% { transform: scale(1.8); opacity: 0; }
 }
 .splash-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* LOGIN LOGO (CORREÇÃO) */
+#loginOverlay img {
+    filter: brightness(0) invert(1) drop-shadow(0 0 8px rgba(59,130,246,0.6));
+    transition: filter 0.3s;
+}
+[data-theme="light"] #loginOverlay img {
+    filter: none !important;
+    filter: drop-shadow(0 0 5px rgba(0,0,0,0.1)) !important;
+}
