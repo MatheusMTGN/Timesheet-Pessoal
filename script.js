@@ -11,7 +11,7 @@ let chartTimeline = null;
 const REPORT_INTERVAL_DAYS = 7; 
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Play Splash
+    // 1. Play Splash on Load
     playSplashTransition();
 
     checkLogin();
@@ -41,25 +41,36 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ==========================================================================
-   Splash Screen
+   Splash Screen (Lógica Refinada para não piscar)
    ========================================================================== */
-function playSplashTransition(callback) {
+function playSplashTransition(onStartCallback) {
     const splash = document.getElementById('splashScreen');
-    splash.style.display = 'flex';
-    splash.classList.remove('splash-hidden');
     
+    // 1. Garante que o splash está visível e opaco
+    splash.classList.remove('splash-hidden');
+    splash.style.display = 'flex';
+    
+    // Reinicia a animação da imagem
     const img = splash.querySelector('img');
     img.style.animation = 'none';
-    img.offsetHeight; 
+    img.offsetHeight; /* trigger reflow */
     img.style.animation = null;
 
+    // 2. Executa a troca de tela IMEDIATAMENTE (enquanto o splash cobre tudo)
+    // Se passarmos uma função de callback, executa ela agora
+    if (onStartCallback) {
+        // Pequeno delay para garantir que o CSS do splash carregou
+        setTimeout(() => {
+            onStartCallback();
+        }, 100);
+    }
+
+    // 3. Aguarda a animação (2s) e depois faz o fade out
     setTimeout(() => {
         splash.classList.add('splash-hidden');
-        setTimeout(() => {
-            splash.style.display = 'none';
-            if (callback) callback(); 
-        }, 500); 
-    }, 2000); 
+        // Remove do display depois que o fade out terminar
+        setTimeout(() => splash.style.display = 'none', 500); 
+    }, 2500); 
 }
 
 /* ==========================================================================
@@ -94,7 +105,7 @@ function updateThemeIcon(isLight) {
 }
 
 /* ==========================================================================
-   CONTACTS & EXPORT HUB (MakeOne 3.0)
+   CONTACTS & EXPORT HUB
    ========================================================================== */
 let contacts = [];
 
@@ -260,7 +271,7 @@ function checkWeeklyReport() {
 }
 
 /* ==========================================================================
-   Login System
+   Login System (SEM PISCA)
    ========================================================================== */
 function checkLogin() {
     const savedName = localStorage.getItem('devAnalystName');
@@ -284,8 +295,15 @@ function handleLogin(e) {
     const name = input.value.trim();
     if (name) {
         localStorage.setItem('devAnalystName', name);
+        
+        // AQUI ESTÁ O TRUQUE: Executa a troca de tela (checkLogin) ENQUANTO o splash cobre tudo
         playSplashTransition(() => {
-            checkLogin(); 
+            // Esconde a tela de login explicitamente
+            document.getElementById('loginOverlay').classList.add('hidden');
+            // Mostra o dashboard
+            checkLogin();
+            
+            // Verifica relatório semanal em silêncio
             setTimeout(checkWeeklyReport, 500);
         });
     }
@@ -529,6 +547,9 @@ function checkActiveTimer() {
     }
 }
 
+/* ==========================================================================
+   Data Handling & Filters
+   ========================================================================== */
 document.getElementById('manualForm').addEventListener('submit', (e) => {
     e.preventDefault();
     
@@ -672,12 +693,12 @@ function updateCharts(entries) {
         dataPie.push(othersSum);
         
         colorsPie = [
-            'rgba(59, 130, 246, 0.8)',
-            'rgba(16, 185, 129, 0.8)',
-            'rgba(245, 158, 11, 0.8)',
-            'rgba(239, 68, 68, 0.8)',
-            'rgba(139, 92, 246, 0.8)',
-            'rgba(156, 163, 175, 0.8)'
+            'rgba(59, 130, 246, 0.8)',   // Azul
+            'rgba(16, 185, 129, 0.8)',  // Verde
+            'rgba(245, 158, 11, 0.8)',  // Laranja
+            'rgba(239, 68, 68, 0.8)',   // Vermelho
+            'rgba(139, 92, 246, 0.8)',  // Roxo
+            'rgba(156, 163, 175, 0.8)'  // Cinza (Outros)
         ];
     } else {
         labelsPie = projectArray.map(i => i.label);
