@@ -2,21 +2,26 @@
 let timerInterval = null;
 let startTime = null;
 let isRunning = false;
+let isPaused = false;
+let accumulatedTime = 0; // Tempo acumulado antes da pausa
 let nextBeepThreshold = 3600;
 let soundEnabled = true;
 let currentAnalyst = ""; 
 let chartProjects = null;
 let chartTimeline = null;
 
+// New State for Modals
+let currentModalContext = null; // 'timer' or 'manual'
+let selectedTags = { timer: [], manual: [] };
+let descriptions = { timer: "", manual: "" };
+let currentEntryId = null; // For entry details modal
+
 const REPORT_INTERVAL_DAYS = 7; 
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Play Splash on Load
     playSplashTransition();
-
     checkLogin();
     
-    // 2. Theme
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
@@ -32,43 +37,31 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('manualDate').valueAsDate = new Date();
     loadEntries(); 
     checkActiveTimer(); 
-
-    // Carrega contatos
     loadContacts();
-
-    // Check Weekly logic
     setTimeout(checkWeeklyReport, 2500); 
 });
 
 /* ==========================================================================
-   Splash Screen (Lógica Refinada para não piscar)
+   Splash Screen
    ========================================================================== */
 function playSplashTransition(onStartCallback) {
     const splash = document.getElementById('splashScreen');
-    
-    // 1. Garante que o splash está visível e opaco
     splash.classList.remove('splash-hidden');
     splash.style.display = 'flex';
     
-    // Reinicia a animação da imagem
     const img = splash.querySelector('img');
     img.style.animation = 'none';
-    img.offsetHeight; /* trigger reflow */
+    img.offsetHeight;
     img.style.animation = null;
 
-    // 2. Executa a troca de tela IMEDIATAMENTE (enquanto o splash cobre tudo)
-    // Se passarmos uma função de callback, executa ela agora
     if (onStartCallback) {
-        // Pequeno delay para garantir que o CSS do splash carregou
         setTimeout(() => {
             onStartCallback();
         }, 100);
     }
 
-    // 3. Aguarda a animação (2s) e depois faz o fade out
     setTimeout(() => {
         splash.classList.add('splash-hidden');
-        // Remove do display depois que o fade out terminar
         setTimeout(() => splash.style.display = 'none', 500); 
     }, 2500); 
 }
@@ -101,6 +94,484 @@ function updateThemeIcon(isLight) {
     } else {
         icon.className = 'fa-solid fa-moon';
         btn.classList.remove('text-yellow-500');
+    }
+}
+
+/* ==========================================================================
+   TAG SELECTOR MODAL (REDESIGNED)
+   ========================================================================== */
+function openTagSelector(context) {
+    currentModalContext = context;
+    const modal = document.getElementById('tagSelectorModal');
+    const newTagInput = document.getElementById('newTagInput');
+    const searchInput = document.getElementById('tagSearchInput');
+    
+    modal.classList.remove('hidden');
+    newTagInput.value = '';
+    searchInput.value = '';
+    
+    renderTagsModal();
+    
+    // Setup search listener
+    searchInput.oninput = (e) => {
+        renderTagsModal(e.target.value.trim().toLowerCase());
+    };
+    
+    // Setup Enter key for new tag creation
+    newTagInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            createNewTag();
+        }
+    };
+}
+
+function createNewTag() {
+    const input = document.getElementById('newTagInput');
+    const tagName = input.value.trim();
+    
+    if (!tagName) return;
+    
+    // Check if already selected
+    if (selectedTags[currentModalContext].includes(tagName)) {
+        alert('Esta tag já está selecionada!');
+        input.value = '';
+        return;
+    }
+    
+    // Add to selection
+    selectedTags[currentModalContext].push(tagName);
+    input.value = '';
+    renderTagsModal();
+    
+    // Play feedback sound
+    playCasioBeep(0.05);
+}
+
+function renderTagsModal(searchQuery = '') {
+    const allTags = getAllExistingTags();
+    const availableContainer = document.getElementById('availableTagsList');
+    const selectedContainer = document.getElementById('selectedTagsArea');
+    const selectedCount = document.getElementById('selectedTagsCount');
+    const availableCount = document.getElementById('availableTagsCount');
+    
+    // Filter tags based on search
+    const filteredTags = searchQuery 
+        ? allTags.filter(t => t.toLowerCase().includes(searchQuery))
+        : allTags;
+    
+    // Update counts
+    selectedCount.textContent = `${selectedTags[currentModalContext].length} selecionada${selectedTags[currentModalContext].length !== 1 ? 's' : ''}`;
+    availableCount.textContent = `${filteredTags.length} tag${filteredTags.length !== 1 ? 's' : ''}`;
+    
+    // Render Available Tags
+    availableContainer.innerHTML = '';
+    
+    if (filteredTags.length === 0) {
+        availableContainer.innerHTML = `
+            <p class="text-gray-500 text-sm text-center py-8">
+                ${searchQuery ? 'Nenhuma tag encontrada.' : 'Nenhuma tag criada ainda.<br>Use o campo acima para criar.'}
+            </p>
+        `;
+    } else {
+        filteredTags.forEach(tag => {
+            const isSelected = selectedTags[currentModalContext].includes(tag);
+            const item = document.createElement('div');
+            item.className = `tag-list-item ${isSelected ? 'selected' : ''}`;
+            item.style.setProperty('--tag-color', getTagColor(tag));
+            
+            item.innerHTML = `
+                <div class="tag-color-indicator" style="background-color: ${getTagColor(tag)}"></div>
+                <span class="tag-list-name">${tag}</span>
+                ${isSelected ? '<i class="fa-solid fa-check text-purple-500"></i>' : '<i class="fa-regular fa-circle text-gray-600"></i>'}
+            `;
+            
+            item.onclick = () => toggleTagInModal(tag);
+            availableContainer.appendChild(item);
+        });
+    }
+    
+    // Render Selected Tags
+    selectedContainer.innerHTML = '';
+    
+    if (selectedTags[currentModalContext].length === 0) {
+        selectedContainer.innerHTML = `
+            <div class="absolute inset-0 flex items-center justify-center text-gray-500">
+                <div class="text-center">
+                    <i class="fa-solid fa-hand-pointer text-4xl mb-3 opacity-20"></i>
+                    <p class="text-xs font-medium">Clique ao lado para selecionar</p>
+                </div>
+            </div>
+        `;
+    } else {
+        selectedTags[currentModalContext].forEach(tag => {
+            const chip = document.createElement('div');
+            chip.className = 'selected-tag-chip';
+            chip.style.backgroundColor = getTagColor(tag);
+            chip.innerHTML = `
+                <span>${tag}</span>
+                <button onclick="event.stopPropagation(); removeTagFromSelection('${tag}')" class="remove-tag-btn">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            `;
+            selectedContainer.appendChild(chip);
+        });
+    }
+}
+
+function toggleTagInModal(tagName) {
+    const index = selectedTags[currentModalContext].indexOf(tagName);
+    
+    if (index > -1) {
+        selectedTags[currentModalContext].splice(index, 1);
+    } else {
+        selectedTags[currentModalContext].push(tagName);
+    }
+    
+    renderTagsModal(document.getElementById('tagSearchInput').value.trim().toLowerCase());
+}
+
+function removeTagFromSelection(tagName) {
+    const index = selectedTags[currentModalContext].indexOf(tagName);
+    if (index > -1) {
+        selectedTags[currentModalContext].splice(index, 1);
+        renderTagsModal(document.getElementById('tagSearchInput').value.trim().toLowerCase());
+    }
+}
+
+function clearAllSelectedTags() {
+    if (selectedTags[currentModalContext].length === 0) return;
+    
+    if (confirm('Limpar todas as tags selecionadas?')) {
+        selectedTags[currentModalContext] = [];
+        renderTagsModal();
+    }
+}
+
+function getAllExistingTags() {
+    const entries = JSON.parse(localStorage.getItem('devTimesheet')) || [];
+    const tagSet = new Set();
+    entries.forEach(e => {
+        if (e.tags && Array.isArray(e.tags)) {
+            e.tags.forEach(t => tagSet.add(t));
+        }
+    });
+    return Array.from(tagSet).sort();
+}
+
+function getTagColor(str) {
+    // Generate pastel color from string
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 70%, 80%)`; // Pastel with 70% saturation, 80% lightness
+}
+
+function closeTagSelector() {
+    document.getElementById('tagSelectorModal').classList.add('hidden');
+    currentModalContext = null;
+}
+
+function confirmTagSelection() {
+    if (currentModalContext) {
+        updateTagPreview(currentModalContext);
+        closeTagSelector();
+    }
+}
+
+function updateTagPreview(context) {
+    const preview = document.getElementById(`${context}TagsPreview`);
+    const tags = selectedTags[context];
+    
+    if (tags.length === 0) {
+        preview.textContent = 'Selecionar Tags...';
+        preview.parentElement.classList.remove('has-content');
+    } else {
+        preview.textContent = tags.slice(0, 3).join(', ') + (tags.length > 3 ? ` +${tags.length - 3}` : '');
+        preview.parentElement.classList.add('has-content');
+    }
+}
+
+/* ==========================================================================
+   DESCRIPTION EDITOR MODAL
+   ========================================================================== */
+function openDescriptionEditor(context) {
+    currentModalContext = context;
+    const modal = document.getElementById('descriptionEditorModal');
+    const textarea = document.getElementById('descriptionTextarea');
+    const preview = document.getElementById('descriptionPreview');
+    const charCount = document.getElementById('charCount');
+    
+    textarea.value = descriptions[context] || '';
+    updateCharCount();
+    updatePreview();
+    
+    modal.classList.remove('hidden');
+    textarea.focus();
+    
+    // Setup live preview
+    textarea.oninput = () => {
+        updateCharCount();
+        updatePreview();
+    };
+}
+
+function updateCharCount() {
+    const textarea = document.getElementById('descriptionTextarea');
+    const charCount = document.getElementById('charCount');
+    const count = textarea.value.length;
+    charCount.textContent = `${count} caractere${count !== 1 ? 's' : ''}`;
+}
+
+function updatePreview() {
+    const textarea = document.getElementById('descriptionTextarea');
+    const preview = document.getElementById('descriptionPreview');
+    const text = textarea.value.trim();
+    
+    if (!text) {
+        preview.innerHTML = `
+            <p class="text-gray-500 text-sm text-center py-8">
+                <i class="fa-solid fa-file-lines text-3xl mb-2 opacity-20 block"></i>
+                A pré-visualização aparecerá aqui
+            </p>
+        `;
+        return;
+    }
+    
+    // Simple Markdown parser
+    let html = text
+        // Headers
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        // Bold
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/__(.*?)__/gim, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/_(.*?)_/gim, '<em>$1</em>')
+        // Strikethrough
+        .replace(/~~(.*?)~~/gim, '<del>$1</del>')
+        // Inline code
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        // Links
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
+        // Line breaks
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>')
+        // Lists
+        .replace(/^\- (.*$)/gim, '<li>$1</li>')
+        .replace(/^\* (.*$)/gim, '<li>$1</li>')
+        // Blockquote
+        .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+    
+    // Wrap in paragraph if not wrapped
+    if (!html.startsWith('<')) {
+        html = '<p>' + html + '</p>';
+    }
+    
+    // Wrap list items
+    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    
+    preview.innerHTML = html;
+}
+
+function insertTextFormat(before, after) {
+    const textarea = document.getElementById('descriptionTextarea');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    const beforeText = textarea.value.substring(0, start);
+    const afterText = textarea.value.substring(end);
+    
+    // If at start of line, insert format
+    const isLineStart = start === 0 || textarea.value[start - 1] === '\n';
+    
+    if (isLineStart && (before === '# ' || before === '- ' || before === '> ')) {
+        textarea.value = beforeText + before + selectedText + afterText;
+        textarea.selectionStart = textarea.selectionEnd = start + before.length + selectedText.length;
+    } else {
+        textarea.value = beforeText + before + selectedText + after + afterText;
+        textarea.selectionStart = start + before.length;
+        textarea.selectionEnd = start + before.length + selectedText.length;
+    }
+    
+    textarea.focus();
+    updateCharCount();
+    updatePreview();
+}
+
+function clearDescription() {
+    if (confirm('Limpar todo o conteúdo?')) {
+        document.getElementById('descriptionTextarea').value = '';
+        updateCharCount();
+        updatePreview();
+    }
+}
+
+function closeDescriptionEditor() {
+    document.getElementById('descriptionEditorModal').classList.add('hidden');
+    currentModalContext = null;
+}
+
+function confirmDescription() {
+    if (currentModalContext) {
+        const textarea = document.getElementById('descriptionTextarea');
+        descriptions[currentModalContext] = textarea.value.trim();
+        updateDescPreview(currentModalContext);
+        closeDescriptionEditor();
+    }
+}
+
+function updateDescPreview(context) {
+    const preview = document.getElementById(`${context}DescPreview`);
+    const desc = descriptions[context];
+    
+    if (!desc) {
+        preview.textContent = 'Escrever descrição...';
+        preview.parentElement.classList.remove('has-content');
+    } else {
+        const truncated = desc.length > 50 ? desc.substring(0, 50) + '...' : desc;
+        preview.textContent = truncated;
+        preview.parentElement.classList.add('has-content');
+    }
+}
+
+/* ==========================================================================
+   ENTRY DETAILS MODAL
+   ========================================================================== */
+function openEntryDetails(entryId) {
+    const entries = JSON.parse(localStorage.getItem('devTimesheet')) || [];
+    const entry = entries.find(e => e.id === entryId);
+    
+    if (!entry) return;
+    
+    currentEntryId = entryId;
+    const modal = document.getElementById('entryDetailsModal');
+    const content = document.getElementById('entryDetailsContent');
+    
+    // Calculate project stats
+    const projectEntries = entries.filter(e => e.project === entry.project);
+    const totalHours = projectEntries.reduce((sum, e) => sum + e.hours, 0);
+    const totalH = Math.floor(totalHours);
+    const totalM = Math.round((totalHours - totalH) * 60);
+    
+    const h = Math.floor(entry.hours);
+    const m = Math.round((entry.hours - h) * 60);
+    
+    // Render description with Markdown
+    const renderedDescription = entry.description ? renderMarkdown(entry.description) : '<em class="text-gray-500">Sem descrição registrada</em>';
+    
+    content.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="stat-card">
+                <div class="stat-label"><i class="fa-solid fa-folder mr-2"></i>Projeto Total</div>
+                <div class="stat-value">${totalH}h ${totalM}m</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label"><i class="fa-solid fa-list mr-2"></i>Total de Registros</div>
+                <div class="stat-value">${projectEntries.length}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label"><i class="fa-solid fa-clock mr-2"></i>Este Registro</div>
+                <div class="stat-value">${h}h ${m}m</div>
+            </div>
+        </div>
+        
+        <div class="detail-section">
+            <div class="detail-row">
+                <span class="detail-label"><i class="fa-solid fa-calendar mr-2"></i>Data</span>
+                <span class="detail-value">${formatDate(entry.date)}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label"><i class="fa-solid fa-user-tie mr-2"></i>Cliente</span>
+                <span class="detail-value">${entry.client || '-'}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label"><i class="fa-solid fa-folder mr-2"></i>Projeto</span>
+                <span class="detail-value font-bold">${entry.project}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label"><i class="fa-solid fa-layer-group mr-2"></i>Categoria</span>
+                <span class="detail-value"><span class="category-badge">${entry.category || 'Geral'}</span></span>
+            </div>
+        </div>
+        
+        ${entry.tags && entry.tags.length > 0 ? `
+            <div class="detail-section">
+                <div class="detail-label mb-2"><i class="fa-solid fa-tags mr-2"></i>Tags</div>
+                <div class="flex flex-wrap gap-2">
+                    ${entry.tags.map(tag => `<span class="tag-chip-readonly" style="background-color: ${getTagColor(tag)}; color: #1e293b;">${tag}</span>`).join('')}
+                </div>
+            </div>
+        ` : ''}
+        
+        <div class="detail-section">
+            <div class="detail-label mb-3"><i class="fa-solid fa-file-lines mr-2"></i>Descrição</div>
+            <div class="description-box description-rendered">
+                ${renderedDescription}
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+function renderMarkdown(text) {
+    if (!text || !text.trim()) return '<em class="text-gray-500">Sem descrição registrada</em>';
+    
+    let html = text
+        // Headers
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        // Bold
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/__(.*?)__/gim, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/_(.*?)_/gim, '<em>$1</em>')
+        // Strikethrough
+        .replace(/~~(.*?)~~/gim, '<del>$1</del>')
+        // Inline code
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        // Links
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
+        // Blockquote (antes de line breaks)
+        .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
+        // Line breaks
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+    
+    // Wrap list items
+    html = html.replace(/^[\-\*] (.*)$/gim, '<li>$1</li>');
+    html = html.replace(/(<li>.*?<\/li>)/gis, '<ul>$1</ul>');
+    
+    // Wrap in paragraph if not wrapped
+    if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<blockquote')) {
+        html = '<p>' + html + '</p>';
+    }
+    
+    return html;
+}
+
+function closeEntryDetails() {
+    document.getElementById('entryDetailsModal').classList.add('hidden');
+    currentEntryId = null;
+}
+
+function deleteCurrentEntry() {
+    if (!currentEntryId) return;
+    
+    if(confirm('Excluir este registro?')) {
+        let entries = JSON.parse(localStorage.getItem('devTimesheet')) || [];
+        entries = entries.filter(entry => entry.id !== currentEntryId);
+        localStorage.setItem('devTimesheet', JSON.stringify(entries));
+        closeEntryDetails();
+        loadEntries();
     }
 }
 
@@ -271,7 +742,7 @@ function checkWeeklyReport() {
 }
 
 /* ==========================================================================
-   Login System (SEM PISCA)
+   Login System
    ========================================================================== */
 function checkLogin() {
     const savedName = localStorage.getItem('devAnalystName');
@@ -296,14 +767,9 @@ function handleLogin(e) {
     if (name) {
         localStorage.setItem('devAnalystName', name);
         
-        // AQUI ESTÁ O TRUQUE: Executa a troca de tela (checkLogin) ENQUANTO o splash cobre tudo
         playSplashTransition(() => {
-            // Esconde a tela de login explicitamente
             document.getElementById('loginOverlay').classList.add('hidden');
-            // Mostra o dashboard
             checkLogin();
-            
-            // Verifica relatório semanal em silêncio
             setTimeout(checkWeeklyReport, 500);
         });
     }
@@ -319,6 +785,14 @@ function logoutAnalyst() {
 /* ==========================================================================
    Utils & Config
    ========================================================================== */
+function getLocalDateString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
@@ -413,29 +887,60 @@ function restoreBackup(input) {
    ========================================================================== */
 function toggleTimer() {
     const btn = document.getElementById('btnTimerAction');
+    const btnPause = document.getElementById('btnTimerPause');
     const icon = document.getElementById('iconTimer');
     const panel = document.getElementById('timerPanel');
     const status = document.getElementById('timerStatus');
     const projectInput = document.getElementById('timerProject');
-    const descInput = document.getElementById('timerDesc');
+    const clientInput = document.getElementById('timerClient');
     const catInput = document.getElementById('timerCategory');
 
+    // Se está pausado, resume
+    if (isPaused) {
+        isPaused = false;
+        startTime = Date.now(); // Recalcula o startTime baseado no tempo acumulado
+        
+        btn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-green-600', 'hover:bg-green-700');
+        btn.classList.add('bg-red-500', 'hover:bg-red-600');
+        icon.classList.remove('fa-play');
+        icon.classList.add('fa-stop');
+        
+        btnPause.classList.remove('hidden');
+        
+        panel.classList.add('timer-active');
+        panel.style.borderLeftColor = '#ef4444'; // Red border
+        
+        status.innerText = "Registrando...";
+        status.classList.remove('text-orange-500');
+        status.classList.add('text-blue-600');
+        
+        timerInterval = setInterval(updateDisplay, 1000);
+        saveTimerState(clientInput.value, projectInput.value, catInput.value);
+        return;
+    }
+
+    // Se não está rodando, inicia
     if (!isRunning) {
         if(!projectInput.value.trim()) { alert("Digite o projeto!"); return; }
         if(!catInput.value || catInput.value === "") { alert("Selecione uma Categoria!"); return; }
         
         isRunning = true;
+        isPaused = false;
+        accumulatedTime = 0;
         startTime = Date.now();
         
         const saved = JSON.parse(localStorage.getItem('timerState'));
         if(!saved || !saved.active) nextBeepThreshold = 3600;
 
-        saveTimerState(projectInput.value, descInput.value, catInput.value);
+        saveTimerState(clientInput.value, projectInput.value, catInput.value);
 
         btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
         btn.classList.add('bg-red-500', 'hover:bg-red-600');
         icon.classList.remove('fa-play');
         icon.classList.add('fa-stop');
+        
+        btnPause.classList.remove('hidden');
+        
         panel.classList.add('timer-active');
         status.innerText = "Registrando...";
         status.classList.add('text-blue-600');
@@ -443,35 +948,80 @@ function toggleTimer() {
         timerInterval = setInterval(updateDisplay, 1000);
 
     } else {
+        // Se está rodando, para e salva
         clearInterval(timerInterval);
-        const elapsedMS = Date.now() - startTime;
-        const hours = elapsedMS / (1000 * 60 * 60);
+        const totalElapsed = accumulatedTime + (Date.now() - startTime);
+        const hours = totalElapsed / (1000 * 60 * 60);
 
-        if(elapsedMS < 10000 && !confirm("Tempo < 10s. Salvar?")) {
+        if(totalElapsed < 10000 && !confirm("Tempo < 10s. Salvar?")) {
             resetTimerUI();
             return;
         }
 
         const entry = {
             id: Date.now(),
-            date: new Date().toISOString().split('T')[0],
+            date: getLocalDateString(),
+            client: clientInput.value || '',
             project: projectInput.value,
-            description: descInput.value || "Sessão",
+            description: descriptions.timer || "Sessão",
             category: catInput.value || "Geral",
+            tags: selectedTags.timer || [],
             hours: hours
         };
         saveEntryToStorage(entry);
+        
+        // Reset tags and description for timer
+        selectedTags.timer = [];
+        descriptions.timer = "";
+        updateTagPreview('timer');
+        updateDescPreview('timer');
+        
         resetTimerUI();
         loadEntries();
     }
 }
 
-function saveTimerState(proj, desc, cat) {
+function pauseTimer() {
+    if (!isRunning || isPaused) return;
+    
+    clearInterval(timerInterval);
+    accumulatedTime += (Date.now() - startTime);
+    isPaused = true;
+    
+    const btn = document.getElementById('btnTimerAction');
+    const icon = document.getElementById('iconTimer');
+    const status = document.getElementById('timerStatus');
+    const panel = document.getElementById('timerPanel');
+    
+    btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'bg-blue-600', 'hover:bg-blue-700');
+    btn.classList.add('bg-green-600', 'hover:bg-green-700');
+    icon.classList.remove('fa-stop');
+    icon.classList.add('fa-play');
+    
+    panel.classList.remove('timer-active');
+    panel.style.borderLeftColor = '#16a34a'; // Green border
+    
+    status.innerText = "Pausado - Clique em Play para continuar";
+    status.classList.remove('text-blue-600');
+    status.classList.add('text-green-500');
+    
+    const projectInput = document.getElementById('timerProject');
+    const clientInput = document.getElementById('timerClient');
+    const catInput = document.getElementById('timerCategory');
+    
+    saveTimerState(clientInput.value, projectInput.value, catInput.value);
+}
+
+function saveTimerState(client, proj, cat) {
     localStorage.setItem('timerState', JSON.stringify({
         start: startTime,
+        accumulated: accumulatedTime,
+        isPaused: isPaused,
+        client: client,
         project: proj,
-        desc: desc,
         category: cat,
+        tags: selectedTags.timer,
+        desc: descriptions.timer,
         active: true,
         beepThreshold: nextBeepThreshold
     }));
@@ -479,7 +1029,7 @@ function saveTimerState(proj, desc, cat) {
 
 function updateDisplay() {
     const now = Date.now();
-    const diff = now - startTime;
+    const diff = accumulatedTime + (now - startTime);
     const diffSeconds = Math.floor(diff / 1000);
     
     if (diffSeconds >= nextBeepThreshold) {
@@ -503,12 +1053,15 @@ function updateDisplay() {
 
 function resetTimerUI() {
     isRunning = false;
+    isPaused = false;
+    accumulatedTime = 0;
     startTime = null;
     localStorage.removeItem('timerState');
     document.title = "MakeOne • Arq. & Negócios";
     document.getElementById('timerDisplay').innerText = "00:00:00";
     
     const btn = document.getElementById('btnTimerAction');
+    const btnPause = document.getElementById('btnTimerPause');
     const icon = document.getElementById('iconTimer');
     const panel = document.getElementById('timerPanel');
     const status = document.getElementById('timerStatus');
@@ -517,33 +1070,77 @@ function resetTimerUI() {
     btn.classList.remove('bg-red-500', 'hover:bg-red-600');
     icon.classList.add('fa-play');
     icon.classList.remove('fa-stop');
+    
+    btnPause.classList.add('hidden');
+    
     panel.classList.remove('timer-active');
+    panel.style.borderLeftColor = '#3b82f6'; // Blue border
+    
     status.innerText = "Cronômetro parado";
-    status.classList.remove('text-blue-600');
+    status.classList.remove('text-blue-600', 'text-orange-500');
 }
 
 function checkActiveTimer() {
     const savedState = JSON.parse(localStorage.getItem('timerState'));
     if (savedState && savedState.active) {
+        document.getElementById('timerClient').value = savedState.client || '';
         document.getElementById('timerProject').value = savedState.project;
-        document.getElementById('timerDesc').value = savedState.desc;
         if(savedState.category) document.getElementById('timerCategory').value = savedState.category;
+        
+        if(savedState.tags) selectedTags.timer = savedState.tags;
+        if(savedState.desc) descriptions.timer = savedState.desc;
+        
+        updateTagPreview('timer');
+        updateDescPreview('timer');
 
         startTime = savedState.start;
+        accumulatedTime = savedState.accumulated || 0;
+        isPaused = savedState.isPaused || false;
         nextBeepThreshold = savedState.beepThreshold || 3600;
         isRunning = true;
         
         const btn = document.getElementById('btnTimerAction');
+        const btnPause = document.getElementById('btnTimerPause');
         const icon = document.getElementById('iconTimer');
         const panel = document.getElementById('timerPanel');
+        const status = document.getElementById('timerStatus');
         
-        btn.classList.remove('bg-blue-600');
-        btn.classList.add('bg-red-500');
-        icon.classList.remove('fa-play');
-        icon.classList.add('fa-stop');
-        panel.classList.add('timer-active');
-        
-        timerInterval = setInterval(updateDisplay, 1000);
+        if (isPaused) {
+            // Timer is paused - GREEN
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-red-500', 'hover:bg-red-600');
+            btn.classList.add('bg-green-600', 'hover:bg-green-700');
+            icon.classList.add('fa-play');
+            icon.classList.remove('fa-stop');
+            
+            btnPause.classList.remove('hidden');
+            
+            panel.style.borderLeftColor = '#16a34a'; // Green border
+            status.innerText = "Pausado - Clique em Play para continuar";
+            status.classList.add('text-green-500');
+            
+            // Update display once with accumulated time
+            const diff = accumulatedTime;
+            const hrs = Math.floor(diff / (1000 * 60 * 60));
+            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const secs = Math.floor((diff % (1000 * 60)) / 1000);
+            const fmt = (n) => n.toString().padStart(2, '0');
+            document.getElementById('timerDisplay').innerText = `${fmt(hrs)}:${fmt(mins)}:${fmt(secs)}`;
+            document.title = `⏸ ${fmt(hrs)}:${fmt(mins)} - MakeOne`;
+        } else {
+            // Timer is running - RED
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-green-600', 'hover:bg-green-700');
+            btn.classList.add('bg-red-500', 'hover:bg-red-600');
+            icon.classList.remove('fa-play');
+            icon.classList.add('fa-stop');
+            
+            btnPause.classList.remove('hidden');
+            
+            panel.classList.add('timer-active');
+            status.innerText = "Registrando...";
+            status.classList.add('text-blue-600');
+            
+            timerInterval = setInterval(updateDisplay, 1000);
+        }
     }
 }
 
@@ -566,14 +1163,23 @@ document.getElementById('manualForm').addEventListener('submit', (e) => {
     const entry = {
         id: Date.now(),
         date: document.getElementById('manualDate').value,
+        client: document.getElementById('manualClient').value || '',
         project: document.getElementById('manualProject').value,
         category: document.getElementById('manualCategory').value || "Geral",
-        description: document.getElementById('manualDesc').value,
+        description: descriptions.manual || '',
+        tags: selectedTags.manual || [],
         hours: hoursDecimal
     };
     saveEntryToStorage(entry);
+    
+    // Reset form and states
     e.target.reset();
     document.getElementById('manualDate').valueAsDate = new Date();
+    selectedTags.manual = [];
+    descriptions.manual = "";
+    updateTagPreview('manual');
+    updateDescPreview('manual');
+    
     loadEntries();
 });
 
@@ -638,24 +1244,49 @@ function renderTable(entries) {
         entries.forEach(entry => {
             total += entry.hours;
             const row = document.createElement('tr');
-            row.className = 'bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 fade-in';
+            row.className = 'bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 fade-in cursor-pointer';
+            row.onclick = () => openEntryDetails(entry.id);
             
             const h = Math.floor(entry.hours);
             const m = Math.round((entry.hours - h) * 60);
             const timeString = `${h}h ${m > 0 ? m + 'm' : ''}`;
 
-            const categoryBadge = entry.category 
-                ? `<span class="text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">${entry.category}</span>` 
-                : '';
+            const categoryBadge = `<span class="category-badge">${entry.category || 'Geral'}</span>`;
+            
+            // Tags display (max 3)
+            let tagsHtml = '';
+            if (entry.tags && entry.tags.length > 0) {
+                const displayTags = entry.tags.slice(0, 3);
+                const remainingCount = entry.tags.length - 3;
+                
+                tagsHtml = displayTags.map(tag => 
+                    `<span class="tag-chip-mini" style="background-color: ${getTagColor(tag)}; color: #1e293b;">${tag}</span>`
+                ).join('');
+                
+                if (remainingCount > 0) {
+                    tagsHtml += `<span class="tag-count-badge">+${remainingCount}</span>`;
+                }
+            }
 
             row.innerHTML = `
                 <td class="px-6 py-4 font-medium text-gray-900 dark:text-white">${formatDate(entry.date)}</td>
-                <td class="px-6 py-4"><span class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded border border-blue-400 dark:bg-blue-900 dark:text-blue-300 dark:border-blue-800">${entry.project}</span></td>
-                <td class="px-6 py-4 text-center">${categoryBadge}</td>
-                <td class="px-6 py-4 text-gray-600 dark:text-gray-300">${entry.description}</td>
+                <td class="px-6 py-4">
+                    <div class="flex flex-col gap-1">
+                        <span class="text-xs text-gray-500 dark:text-gray-400">${entry.client || '-'}</span>
+                        <span class="font-semibold" style="color: var(--text-primary)">${entry.project}</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4">
+                    <div class="flex flex-col gap-2">
+                        ${categoryBadge}
+                        ${tagsHtml ? `<div class="flex flex-wrap gap-1">${tagsHtml}</div>` : ''}
+                    </div>
+                </td>
                 <td class="px-6 py-4 text-center font-bold text-gray-700 dark:text-gray-200">${timeString}</td>
                 <td class="px-6 py-4 text-center">
-                    <button onclick="deleteEntry(${entry.id})" class="text-red-500 hover:text-red-700 transition-colors"><i class="fa-solid fa-trash"></i></button>
+                    <button onclick="event.stopPropagation(); openEntryDetails(${entry.id})" class="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Detalhes">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
                 </td>
             `;
             list.appendChild(row);
@@ -693,12 +1324,12 @@ function updateCharts(entries) {
         dataPie.push(othersSum);
         
         colorsPie = [
-            'rgba(59, 130, 246, 0.8)',   // Azul
-            'rgba(16, 185, 129, 0.8)',  // Verde
-            'rgba(245, 158, 11, 0.8)',  // Laranja
-            'rgba(239, 68, 68, 0.8)',   // Vermelho
-            'rgba(139, 92, 246, 0.8)',  // Roxo
-            'rgba(156, 163, 175, 0.8)'  // Cinza (Outros)
+            'rgba(59, 130, 246, 0.8)',
+            'rgba(16, 185, 129, 0.8)',
+            'rgba(245, 158, 11, 0.8)',
+            'rgba(239, 68, 68, 0.8)',
+            'rgba(139, 92, 246, 0.8)',
+            'rgba(156, 163, 175, 0.8)'
         ];
     } else {
         labelsPie = projectArray.map(i => i.label);
@@ -795,23 +1426,24 @@ function updateCharts(entries) {
     });
 }
 
-function deleteEntry(id) {
-    if(confirm('Excluir este registro?')) {
-        let entries = JSON.parse(localStorage.getItem('devTimesheet')) || [];
-        entries = entries.filter(entry => entry.id !== id);
-        localStorage.setItem('devTimesheet', JSON.stringify(entries));
-        loadEntries();
-    }
-}
-
 function updateProjectLists(activeEntries) {
     const projects = [...new Set(activeEntries.map(e => e.project))].sort();
-    const datalist = document.getElementById('projectOptions');
-    datalist.innerHTML = '';
+    const clients = [...new Set(activeEntries.map(e => e.client).filter(c => c))].sort();
+    
+    const projectDatalist = document.getElementById('projectOptions');
+    projectDatalist.innerHTML = '';
     projects.forEach(p => {
         const option = document.createElement('option');
         option.value = p;
-        datalist.appendChild(option);
+        projectDatalist.appendChild(option);
+    });
+    
+    const clientDatalist = document.getElementById('clientOptions');
+    clientDatalist.innerHTML = '';
+    clients.forEach(c => {
+        const option = document.createElement('option');
+        option.value = c;
+        clientDatalist.appendChild(option);
     });
 
     const filterSelect = document.getElementById('filterProject');
@@ -899,8 +1531,10 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
 
     worksheet.columns = [
         { header: 'Data', key: 'date', width: 15 },       
+        { header: 'Cliente', key: 'client', width: 20 },
         { header: 'Projeto', key: 'project', width: 25 }, 
         { header: 'Tipo', key: 'category', width: 18 },   
+        { header: 'Tags', key: 'tags', width: 30 },
         { header: 'Descrição', key: 'desc', width: 45 },  
         { header: 'Horas', key: 'hours', width: 12 },     
         { header: '', key: 'spacer', width: 5 }           
@@ -911,9 +1545,11 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
         totalHours += e.hours;
         const row = worksheet.addRow({
             date: formatDate(e.date),
+            client: e.client || '-',
             project: e.project,
             category: e.category || "Geral",
-            desc: e.description,
+            tags: e.tags && e.tags.length > 0 ? e.tags.join(', ') : '-',
+            desc: e.description || '-',
             hours: e.hours
         });
         
@@ -934,7 +1570,7 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
     const headerRow = worksheet.getRow(1);
     headerRow.height = 35;
     
-    for(let i=1; i<=5; i++) {
+    for(let i=1; i<=7; i++) {
         const cell = headerRow.getCell(i);
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12, name: 'Calibri' };
         cell.fill = {
@@ -945,15 +1581,15 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
     }
 
-    worksheet.autoFilter = { from: 'A1', to: { row: 1, column: 5 } };
+    worksheet.autoFilter = { from: 'A1', to: { row: 1, column: 7 } };
 
-    const totalRow = worksheet.addRow(['', '', '', 'TOTAL GERAL:', totalHours]);
+    const totalRow = worksheet.addRow(['', '', '', '', '', 'TOTAL GERAL:', totalHours]);
     totalRow.height = 30;
     
-    totalRow.getCell(4).font = { bold: true, size: 11 };
-    totalRow.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' };
+    totalRow.getCell(6).font = { bold: true, size: 11 };
+    totalRow.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
 
-    const valueCell = totalRow.getCell(5);
+    const valueCell = totalRow.getCell(7);
     valueCell.numFmt = '0.00 "h"';
     valueCell.font = { bold: true, size: 14, color: { argb: 'FF059669' } }; 
     valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -968,12 +1604,12 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
     };
 
     if (includeCharts && chartProjects && chartTimeline) {
-        const analystRow = worksheet.getCell('G1'); 
+        const analystRow = worksheet.getCell('I1'); 
         analystRow.value = `MakeOne | Analista Responsável: ${currentAnalyst || "Não Identificado"}`;
         analystRow.font = { bold: true, size: 12, color: { argb: 'FF475569' } };
         analystRow.alignment = { vertical: 'middle' };
 
-        const chartHeader = worksheet.getCell('G2');
+        const chartHeader = worksheet.getCell('I2');
         chartHeader.value = "MAKEONE - VISÃO GERAL DE PERFORMANCE";
         chartHeader.font = { bold: true, size: 16, color: { argb: 'FF3B82F6' } };
         chartHeader.alignment = { vertical: 'middle' };
@@ -999,8 +1635,8 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
         const imageId1 = workbook.addImage({ base64: imgProjects, extension: 'png' });
         const imageId2 = workbook.addImage({ base64: imgTimeline, extension: 'png' });
 
-        worksheet.addImage(imageId1, { tl: { col: 6, row: 3 }, ext: { width: 500, height: 300 } });
-        worksheet.addImage(imageId2, { tl: { col: 6, row: 19 }, ext: { width: 500, height: 300 } });
+        worksheet.addImage(imageId1, { tl: { col: 8, row: 3 }, ext: { width: 500, height: 300 } });
+        worksheet.addImage(imageId2, { tl: { col: 8, row: 19 }, ext: { width: 500, height: 300 } });
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
