@@ -34,6 +34,7 @@
         <option value="Planejamento">
         <option value="Estudo/Pesquisa">
         <option value="Infraestrutura">
+        <option value="Suporte">
     </datalist>
 
     <header class="w-full max-w-6xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -127,6 +128,7 @@
                         <option value="Planejamento">Planejamento</option>
                         <option value="Estudo/Pesquisa">Estudo/Pesquisa</option>
                         <option value="Infraestrutura">Infraestrutura</option>
+                        <option value="Suporte">Suporte</option>
                     </select>
                 </div>
             </div>
@@ -196,6 +198,7 @@
                             <option value="Planejamento">Planejamento</option>
                             <option value="Estudo/Pesquisa">Estudo/Pesquisa</option>
                             <option value="Infraestrutura">Infraestrutura</option>
+                            <option value="Suporte">Suporte</option>
                         </select>
                     </div>
                     <div class="md:col-span-4">
@@ -563,6 +566,32 @@
                                 </select>
                             </div>
                         </label>
+                        
+                        <!-- Nova seção de período -->
+                        <div class="mt-4 p-4 bg-black/20 rounded-lg border border-gray-700/50">
+                            <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Período de Exportação</label>
+                            <div class="space-y-2">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="exportPeriod" value="all" checked onchange="toggleMonthSelector(false)" class="w-3.5 h-3.5 text-blue-600 bg-gray-700 border-gray-600">
+                                    <span class="text-sm" style="color: var(--text-primary)">Período Todo</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="exportPeriod" value="week" onchange="toggleMonthSelector(false)" class="w-3.5 h-3.5 text-blue-600 bg-gray-700 border-gray-600">
+                                    <span class="text-sm" style="color: var(--text-primary)">Última Semana (7 dias)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="exportPeriod" value="today" onchange="toggleMonthSelector(false)" class="w-3.5 h-3.5 text-blue-600 bg-gray-700 border-gray-600">
+                                    <span class="text-sm" style="color: var(--text-primary)">Hoje</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="exportPeriod" value="month" onchange="toggleMonthSelector(true)" class="w-3.5 h-3.5 text-blue-600 bg-gray-700 border-gray-600">
+                                    <span class="text-sm" style="color: var(--text-primary)">Mês Específico</span>
+                                </label>
+                                <div id="monthSelectorContainer" class="hidden mt-2 ml-6">
+                                    <input type="month" id="exportMonthSelect" class="w-full input-custom text-sm rounded-lg p-2" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <span class="section-title">2. Quem deve receber? (Gestores)</span>

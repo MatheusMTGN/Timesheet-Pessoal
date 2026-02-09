@@ -688,6 +688,21 @@ function toggleSpecificProjectSelect(show) {
     }
 }
 
+function toggleMonthSelector(show) {
+    const container = document.getElementById('monthSelectorContainer');
+    const monthInput = document.getElementById('exportMonthSelect');
+    if (show) {
+        container.classList.remove('hidden');
+        // Define o mês atual como padrão
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        monthInput.value = `${year}-${month}`;
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
 async function executeExportHub() {
     const selectedContacts = contacts.filter(c => c.selected);
     if (selectedContacts.length === 0) {
@@ -696,18 +711,34 @@ async function executeExportHub() {
     const emails = selectedContacts.map(c => c.email).join(';');
 
     const scopeRadio = document.querySelector('input[name="exportScope"]:checked').value;
+    const periodRadio = document.querySelector('input[name="exportPeriod"]:checked').value;
     let projectFilter = null;
+    let selectedMonth = null;
 
     if (scopeRadio === 'specific') {
         projectFilter = document.getElementById('exportSpecificProjectSelect').value;
         if (!projectFilter) return alert("Selecione qual projeto você quer enviar.");
     }
+    
+    if (periodRadio === 'month') {
+        selectedMonth = document.getElementById('exportMonthSelect').value;
+        if (!selectedMonth) return alert("Selecione o mês que deseja exportar.");
+    }
 
-    await exportExcel(true, projectFilter); 
+    await exportExcel(true, projectFilter, periodRadio, selectedMonth); 
 
     const analyst = currentAnalyst || "Analista";
+    let periodDesc = '';
+    if (periodRadio === 'today') periodDesc = ' - Hoje';
+    else if (periodRadio === 'week') periodDesc = ' - Última Semana';
+    else if (periodRadio === 'month' && selectedMonth) {
+        const [year, month] = selectedMonth.split('-');
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        periodDesc = ` - ${monthNames[parseInt(month) - 1]}/${year}`;
+    }
+    
     const subjectTitle = projectFilter ? `Status Report: ${projectFilter}` : `Relatório Geral de Horas`;
-    const subject = `${subjectTitle} - MakeOne - ${analyst}`;
+    const subject = `${subjectTitle}${periodDesc} - MakeOne - ${analyst}`;
     
     const body = `Olá,%0D%0A%0D%0ASegue em anexo o relatório de horas atualizado.%0D%0A%0D%0AArquivo: Excel (Detalhado + Gráficos)%0D%0A%0D%0AAtenciosamente,%0D%0A${analyst}`;
     
@@ -1469,7 +1500,7 @@ function formatDate(dateString) {
 /* ==========================================================================
    Excel Export Logic
    ========================================================================== */
-async function exportExcel(isAuto = false, specificProject = null) {
+async function exportExcel(isAuto = false, specificProject = null, exportPeriod = 'all', selectedMonth = null) {
     const entries = JSON.parse(localStorage.getItem('devTimesheet')) || [];
     const archived = getArchivedProjects();
     const activeEntries = entries.filter(e => !archived.includes(e.project));
@@ -1497,6 +1528,30 @@ async function exportExcel(isAuto = false, specificProject = null) {
             } else if (filterPeriod === 'month') passPeriod = eDate.getMonth() === today.getMonth() && eDate.getFullYear() === today.getFullYear();
             
             return passProject && passPeriod;
+        });
+    }
+    
+    // Aplicar filtro de período quando vem do Export Hub (isAuto = true)
+    if (isAuto && exportPeriod && exportPeriod !== 'all') {
+        const today = new Date(); 
+        today.setHours(0,0,0,0);
+        
+        dataToExport = dataToExport.filter(e => {
+            const eDate = new Date(e.date + 'T00:00:00');
+            
+            if (exportPeriod === 'today') {
+                return eDate.getTime() === today.getTime();
+            } else if (exportPeriod === 'week') {
+                const sevenDaysAgo = new Date(today);
+                sevenDaysAgo.setDate(today.getDate() - 7);
+                return eDate >= sevenDaysAgo && eDate <= today;
+            } else if (exportPeriod === 'month' && selectedMonth) {
+                const [targetYear, targetMonth] = selectedMonth.split('-');
+                const year = eDate.getFullYear();
+                const month = String(eDate.getMonth() + 1).padStart(2, '0');
+                return year === parseInt(targetYear) && month === targetMonth;
+            }
+            return true;
         });
     }
 
@@ -1541,6 +1596,26 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
     ];
 
     let totalHours = 0;
+    
+    // Calcular estatísticas por projeto e categoria
+    const projectStats = {};
+    const categoryStats = {};
+    
+    dataArray.forEach(e => {
+        // Stats por projeto
+        if (!projectStats[e.project]) {
+            projectStats[e.project] = 0;
+        }
+        projectStats[e.project] += e.hours;
+        
+        // Stats por categoria
+        const cat = e.category || 'Geral';
+        if (!categoryStats[cat]) {
+            categoryStats[cat] = 0;
+        }
+        categoryStats[cat] += e.hours;
+    });
+    
     dataArray.forEach(e => {
         totalHours += e.hours;
         const row = worksheet.addRow({
@@ -1602,6 +1677,91 @@ async function generateExcel(dataArray, fileName, includeCharts = false) {
         top: { style: 'double' },
         bottom: { style: 'thick' }
     };
+    
+    // Adicionar seção de estatísticas detalhadas
+    const currentRow = worksheet.rowCount;
+    
+    // Espaço
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    
+    // Título da seção de estatísticas
+    const statsHeaderCell = worksheet.getCell(`A${currentRow + 3}`);
+    statsHeaderCell.value = 'ESTATÍSTICAS DETALHADAS';
+    statsHeaderCell.font = { bold: true, size: 14, color: { argb: 'FF3B82F6' } };
+    worksheet.mergeCells(`A${currentRow + 3}:G${currentRow + 3}`);
+    statsHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    worksheet.addRow([]);
+    
+    // Horas por Projeto
+    const projHeaderCell = worksheet.getCell(`A${currentRow + 5}`);
+    projHeaderCell.value = 'HORAS POR PROJETO';
+    projHeaderCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    projHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E40AF' }
+    };
+    projHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    const projHoursHeaderCell = worksheet.getCell(`B${currentRow + 5}`);
+    projHoursHeaderCell.value = 'Total de Horas';
+    projHoursHeaderCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    projHoursHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E40AF' }
+    };
+    projHoursHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    let projRowIndex = currentRow + 6;
+    const sortedProjects = Object.entries(projectStats).sort((a, b) => b[1] - a[1]);
+    
+    sortedProjects.forEach(([project, hours]) => {
+        const projRow = worksheet.addRow([project, hours]);
+        projRow.getCell(1).font = { bold: true };
+        projRow.getCell(2).numFmt = '0.00 "h"';
+        projRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+        projRow.getCell(2).font = { color: { argb: 'FF059669' } };
+        projRowIndex++;
+    });
+    
+    // Espaço
+    worksheet.addRow([]);
+    projRowIndex++;
+    
+    // Atividades mais Realizadas (por Categoria)
+    const catHeaderCell = worksheet.getCell(`A${projRowIndex}`);
+    catHeaderCell.value = 'ATIVIDADES MAIS REALIZADAS (POR CATEGORIA)';
+    catHeaderCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    catHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF7C3AED' }
+    };
+    catHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    const catHoursHeaderCell = worksheet.getCell(`B${projRowIndex}`);
+    catHoursHeaderCell.value = 'Total de Horas';
+    catHoursHeaderCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    catHoursHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF7C3AED' }
+    };
+    catHoursHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    projRowIndex++;
+    const sortedCategories = Object.entries(categoryStats).sort((a, b) => b[1] - a[1]);
+    
+    sortedCategories.forEach(([category, hours]) => {
+        const catRow = worksheet.addRow([category, hours]);
+        catRow.getCell(1).font = { bold: true };
+        catRow.getCell(2).numFmt = '0.00 "h"';
+        catRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+        catRow.getCell(2).font = { color: { argb: 'FFDC2626' } };
+    });
 
     if (includeCharts && chartProjects && chartTimeline) {
         const analystRow = worksheet.getCell('I1'); 
